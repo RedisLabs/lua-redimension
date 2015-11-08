@@ -9,10 +9,12 @@ local _USAGE = {
   '  unindex_by_id - unindex an element by id ARGV[2]',
   '  update        - update an element ARGV[2] with ARGV[3]..ARGV[3+dimension] values',
   '  query         - query using ranges ARGV[2], ARGV[3]..ARGV[2+dimension-1], ARGV[2+dimension]',
+  '  fuzzy_test    - fuzzily tests the library on ARGV[2] dimension with ARGV[3] items using ARGV[4] queries',
   }
 
 local _dim  -- index's dimension
 local _prec -- index's precision
+local _MAX_PREC = 56
 
 local bin2hex = {
     ['0000'] = '0',
@@ -136,7 +138,6 @@ end
 -- we use in the range query. N times the exponent is the number
 -- of bits we unset and set to get the start and end points of the range.
 local function query_raw(vrange,exp)
-  
   local vstart = {}
   local vend = {}
   -- We start scaling our indexes in order to iterate all areas, so
@@ -208,7 +209,7 @@ local function query_raw(vrange,exp)
     local fields = {}
     v:gsub('([^:]+)', function(f) table.insert(fields, f) end)
     local skip = false
-    for i = 1, _dim-1 do
+    for i = 1, _dim do
       if tonumber(fields[i+1]) < vrange[i][1] or
         tonumber(fields[i+1]) > vrange[i][2]
       then
@@ -233,9 +234,7 @@ local function query(vrange)
   local deltas = {}
   for i, v in ipairs(vrange) do
     if v[1] > v[2] then
-      local t = v[1]
-      vrange[i][1] = vrange[i][2]
-      vrange[i][2] = t
+      vrange[i][1], vrange[i][2] = vrange[i][2], vrange[i][1]
     end
     table.insert(deltas, vrange[i][2]-vrange[i][1]+1)
   end
@@ -249,7 +248,7 @@ local function query(vrange)
   
   local exp = 1
   while delta > 2 do
-    delta = delta / 2
+    delta = math.floor(delta / 2)
     exp = exp + 1
   end
   
@@ -278,7 +277,7 @@ local function query(vrange)
     end
     exp = exp + 1
   end
-  
+    
   return query_raw(vrange,exp)
 end
 
@@ -315,8 +314,8 @@ if cmd == 'create' then
   if dim < 1 then
     error('index dimension has to be at least 1')
   end
-  if prec < 1 or prec > 32 then
-    error('index precision has to be between 1 and 32') -- need to replace bitwise operations with something slower but scalable
+  if prec < 1 or prec > _MAX_PREC then
+    error('index precision has to be between 1 and ' .. _MAX_PREC)
   end
   create(dim, prec)
   return({dim, prec})
@@ -325,6 +324,102 @@ end
 if cmd == 'drop' then
   drop()
   return('dropped.')
+end
+
+-- not really fuzzy w/o changing replication mode and using real randoms
+if cmd == 'fuzzy_test' then
+  local dim, items, queries = tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4])
+  local timings = {}
+  local avgt = 0.0
+  
+  drop()
+  create(dim, _MAX_PREC)
+  load_meta()
+  
+  local id = 0
+  local dataset = {}
+  for i = 1, items do
+    local vars = {}
+    for j = 1, dim do
+      table.insert(vars, math.random(1000))
+    end
+    index(vars, id)
+    table.insert(vars, id)
+    table.insert(dataset, vars)
+    id = id + 1
+  end
+
+  for i = 1, queries do
+    local random = {}
+    for j = 1, dim do
+      local s = math.random(1000)
+      local e = math.random(1000)
+      if e > s then
+        s, e = e, s
+      end
+      table.insert(random, { s, e })
+    end
+    
+    local start_t = redis.call('TIME')
+    local res1 = query(random)
+    local end_t = redis.call('TIME')
+    
+    start_t[1], start_t[2] = tonumber(start_t[1]), tonumber(start_t[2])
+    end_t[1], end_t[2] = tonumber(end_t[1]), tonumber(end_t[2])
+    if end_t[2] > start_t[2] then
+      table.insert(timings, { end_t[1] - start_t[1], end_t[2] - start_t[2] })
+    else
+      table.insert(timings, { end_t[1] - start_t[1] - 1, math.abs(end_t[2] - start_t[2]) })
+    end
+    
+    avgt = (avgt * (#timings - 1) + tonumber(string.format('%d.%06d', timings[#timings][1], timings[#timings][2]))) / #timings
+    
+    local res2 = {}
+    for _, v in pairs(dataset) do
+      local included = true
+      for j = 1, dim do
+        if v[j] < random[j][1] or v[j] > random[j][2] then
+          included = false
+        end
+      end
+      if included then
+        table.insert(res2, v)
+      end
+    end
+    
+    if #res1 ~= #res2 then
+      return {{'dataset', dataset}, {'random', random}, {'res1', res1}, {'res2', res2}}
+      -- error('ERROR ' .. #res1 .. ' VS ' .. #res2)
+    end
+    
+    -- table sorting is so much FUN!
+    local function cmp(a, b, depth)
+      depth = depth or 1
+      
+      if a[depth] < b[depth] then
+        return true
+      end
+      if a[depth] == b[depth] then
+        return depth == dim or cmp(a, b, depth + 1)
+      end
+      if a[depth] > b[depth] then
+        return false
+      end
+      table.sort(res1, cmp)
+      table.sort(res2, cmp)
+      
+      for i1, r1 in ipairs(res1) do
+        for i2 = 1, dim + 1 do
+          if r1[i2] ~= res2[i1][i2] then
+            error('ERROR ' .. r1[i2] .. ' ~= ' .. res2[i1][i2])
+          end
+        end
+      end
+    end
+  end
+
+  -- housekeeping drop() can't be called unless replication mode is changed
+  return({ 'fuzzily tested.', {dim, items, queries, 'avg query time (sec): ' .. tostring(avgt)}})
 end
 
 load_meta()
@@ -364,4 +459,4 @@ if cmd == 'query' then
   return query(vranges)
 end
 
-return(_commands)
+return(_USAGE)

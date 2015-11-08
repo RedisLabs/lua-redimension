@@ -35,11 +35,12 @@ The command may be one of the following:
 * unindex_by_id - unindex an element by id ARGV[2]
 * update        - update an element ARGV[2] with ARGV[3]..ARGV[3+dimension] values
 * query         - query using ranges ARGV[2], ARGV[3]..ARGV[2+dimension-1], ARGV[2+dimension]
+* fuzzy_test    - fuzzily tests the library on ARGV[2] dimension with ARGV[3] items using ARGV[4] queries
 
-Tests
+Testing
 ===
 
-TBD
+Fuzzy-ish testing is implemented inline - use the `fuzzy_test` command to invoke.
 
 License
 ===
