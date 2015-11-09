@@ -26,7 +26,7 @@ The script requires two key names and at least one argument, as follows:
 * KEYS[2] - the index hash key
 * ARGV[1] - the command
 
-The command may be one of the following:
+Command may be one of the following:
 
 * create - create an index with ARGV[2] as dimension and ARGV[3] as precision',
 * drop          - drops an index
