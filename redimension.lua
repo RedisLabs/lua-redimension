@@ -387,8 +387,7 @@ if cmd == 'fuzzy_test' then
     end
     
     if #res1 ~= #res2 then
-      return {{'dataset', dataset}, {'random', random}, {'res1', res1}, {'res2', res2}}
-      -- error('ERROR ' .. #res1 .. ' VS ' .. #res2)
+      error('ERROR ' .. #res1 .. ' VS ' .. #res2)
     end
     
     -- table sorting is so much FUN!
