@@ -353,7 +353,7 @@ if cmd == 'fuzzy_test' then
     for j = 1, dim do
       local s = math.random(1000)
       local e = math.random(1000)
-      if e > s then
+      if e < s then
         s, e = e, s
       end
       table.insert(random, { s, e })
