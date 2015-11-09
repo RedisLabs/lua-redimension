@@ -42,6 +42,11 @@ Testing
 
 Fuzzy-ish testing is implemented inline - use the `fuzzy_test` command to invoke.
 
+Performance
+===
+
+Informal benchmarking can be found at: https://gist.github.com/itamarhaber/3d8c9741c545202925aa
+
 License
 ===
 
