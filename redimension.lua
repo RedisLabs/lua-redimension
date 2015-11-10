@@ -343,7 +343,7 @@ if cmd == 'fuzzy_test' then
       table.insert(vars, math.random(1000))
     end
     index(vars, id)
-    table.insert(vars, id)
+    table.insert(vars, tostring(id))
     table.insert(dataset, vars)
     id = id + 1
   end
@@ -363,6 +363,13 @@ if cmd == 'fuzzy_test' then
     local res1 = query(random)
     local end_t = redis.call('TIME')
     
+    -- some type conversions
+    for i1, v1 in ipairs(res1) do
+      for i2 = 1, dim do
+        res1[i1][i2] = tonumber(res1[i1][i2])
+      end
+    end
+        
     start_t[1], start_t[2] = tonumber(start_t[1]), tonumber(start_t[2])
     end_t[1], end_t[2] = tonumber(end_t[1]), tonumber(end_t[2])
     if end_t[2] > start_t[2] then
@@ -394,23 +401,27 @@ if cmd == 'fuzzy_test' then
     local function cmp(a, b, depth)
       depth = depth or 1
       
+      if depth > dim + 1 then
+        return false
+      end
       if a[depth] < b[depth] then
         return true
       end
       if a[depth] == b[depth] then
-        return depth == dim or cmp(a, b, depth + 1)
+        return cmp(a, b, depth + 1)
       end
       if a[depth] > b[depth] then
         return false
       end
-      table.sort(res1, cmp)
-      table.sort(res2, cmp)
-      
-      for i1, r1 in ipairs(res1) do
-        for i2 = 1, dim + 1 do
-          if r1[i2] ~= res2[i1][i2] then
-            error('ERROR ' .. r1[i2] .. ' ~= ' .. res2[i1][i2])
-          end
+    end
+
+    table.sort(res1, cmp)
+    table.sort(res2, cmp)
+    
+    for i1, r1 in ipairs(res1) do
+      for i2 = 1, dim+1 do
+        if r1[i2] ~= res2[i1][i2] then
+          error('ERROR ' .. i2 .. ': ' .. r1[i2] .. ' ~= ' .. res2[i1][i2])
         end
       end
     end
