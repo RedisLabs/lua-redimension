@@ -300,7 +300,7 @@ end
 
 -- parse arguments
 if #ARGV == 0 or #KEYS ~= 2 then
-  return(_commands)
+  return(_USAGE)
 end
 
 local cmd = ARGV[1]:lower()
